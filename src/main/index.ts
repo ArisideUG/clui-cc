@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, screen, globalShortcut, Tray, Menu, nativeImage, nativeTheme, shell, systemPreferences } from 'electron'
 import { join } from 'path'
 import { existsSync, readdirSync, statSync, createReadStream } from 'fs'
 import { createInterface } from 'readline'
@@ -7,6 +7,7 @@ import { ControlPlane } from './claude/control-plane'
 import { ensureSkills, type SkillStatus } from './skills/installer'
 import { fetchCatalog, listInstalled, installPlugin, uninstallPlugin } from './marketplace/catalog'
 import { log as _log, LOG_FILE, flushLogs } from './logger'
+import { getCliEnv } from './cli-env'
 import { IPC } from '../shared/types'
 import type { RunOptions, NormalizedEvent, EnrichedError } from '../shared/types'
 
@@ -234,18 +235,18 @@ ipcMain.handle(IPC.START, async () => {
 
   let version = 'unknown'
   try {
-    version = execSync('claude -v', { encoding: 'utf-8', timeout: 5000 }).trim()
+    version = execSync('claude -v', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
   } catch {}
 
   let auth: { email?: string; subscriptionType?: string; authMethod?: string } = {}
   try {
-    const raw = execSync('claude auth status', { encoding: 'utf-8', timeout: 5000 }).trim()
+    const raw = execSync('claude auth status', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
     auth = JSON.parse(raw)
   } catch {}
 
   let mcpServers: string[] = []
   try {
-    const raw = execSync('claude mcp list', { encoding: 'utf-8', timeout: 5000 }).trim()
+    const raw = execSync('claude mcp list', { encoding: 'utf-8', timeout: 5000, env: getCliEnv() }).trim()
     if (raw) mcpServers = raw.split('\n').filter(Boolean)
   } catch {}
 
@@ -855,15 +856,70 @@ nativeTheme.on('updated', () => {
   broadcast(IPC.THEME_CHANGED, nativeTheme.shouldUseDarkColors)
 })
 
+// ─── Permission Preflight ───
+// Request all required macOS permissions upfront on first launch so the user
+// is never interrupted mid-session by a permission prompt.
+
+async function requestPermissions(): Promise<void> {
+  if (process.platform !== 'darwin') return
+
+  // ── Microphone (for voice input via Whisper) ──
+  try {
+    const micStatus = systemPreferences.getMediaAccessStatus('microphone')
+    if (micStatus === 'not-determined') {
+      await systemPreferences.askForMediaAccess('microphone')
+    }
+  } catch (err: any) {
+    log(`Permission preflight: microphone check failed — ${err.message}`)
+  }
+
+  // ── Screen Recording (for screenshot attachment) ──
+  // macOS cannot be prompted programmatically — we show a one-time native dialog
+  // that deep-links to System Settings. A flag file persists the dismissal so
+  // "Skip for Now" is respected on subsequent launches.
+  try {
+    const screenStatus = systemPreferences.getMediaAccessStatus('screen')
+    if (screenStatus === 'not-determined' || screenStatus === 'denied') {
+      const { existsSync: fe, writeFileSync: wf } = require('fs')
+      const flagFile = join(app.getPath('userData'), 'screen-permission-prompted')
+      if (!fe(flagFile)) {
+        const { response } = await dialog.showMessageBox({
+          type: 'information',
+          title: 'Screen Recording Permission',
+          message: 'Clui CC needs Screen Recording access to take screenshots.',
+          detail: 'Click "Open Settings" to grant access, then relaunch the app.\n\nYou only need to do this once.',
+          buttons: ['Open Settings', 'Skip for Now'],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        // Write flag regardless of choice — if they opened settings and granted,
+        // the next launch will see screenStatus === 'granted' and skip this block.
+        wf(flagFile, '')
+        if (response === 0) {
+          shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+        }
+      }
+    }
+  } catch (err: any) {
+    log(`Permission preflight: screen check failed — ${err.message}`)
+  }
+
+  // ── Accessibility (for global ⌥+Space shortcut) ──
+  // globalShortcut works without it on modern macOS; Cmd+Shift+K is always the fallback.
+}
+
 // ─── App Lifecycle ───
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // macOS: become an accessory app. Accessory apps can have key windows (keyboard works)
   // without deactivating the currently active app (hover preserved in browsers).
   // This is how Spotlight, Alfred, Raycast work.
   if (process.platform === 'darwin' && app.dock) {
     app.dock.hide()
   }
+
+  // Request permissions upfront so the user is never interrupted mid-session.
+  await requestPermissions()
 
   // Skill provisioning — non-blocking, streams status to renderer
   ensureSkills((status: SkillStatus) => {
