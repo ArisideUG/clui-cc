@@ -58,6 +58,8 @@ interface State {
   staticInfo: StaticInfo | null
   /** User's preferred model override (null = use default) */
   preferredModel: string | null
+  /** User's preferred agent persona (null = no agent) */
+  preferredAgent: string | null
   /** Global permission mode: 'ask' shows cards, 'auto' auto-approves all tool calls */
   permissionMode: 'ask' | 'auto'
 
@@ -74,6 +76,7 @@ interface State {
   // Actions
   initStaticInfo: () => Promise<void>
   setPreferredModel: (model: string | null) => void
+  setPreferredAgent: (agent: string | null) => void
   setPermissionMode: (mode: 'ask' | 'auto') => void
   createTab: () => Promise<string>
   selectTab: (tabId: string) => void
@@ -139,6 +142,7 @@ function makeLocalTab(): TabState {
     sessionTools: [],
     sessionMcpServers: [],
     sessionSkills: [],
+    sessionAgents: [],
     sessionVersion: null,
     queuedPrompts: [],
     workingDirectory: '~',
@@ -155,6 +159,7 @@ export const useSessionStore = create<State>((set, get) => ({
   isExpanded: false,
   staticInfo: null,
   preferredModel: null,
+  preferredAgent: null,
   permissionMode: 'ask',
 
   // Marketplace
@@ -184,6 +189,10 @@ export const useSessionStore = create<State>((set, get) => ({
 
   setPreferredModel: (model) => {
     set({ preferredModel: model })
+  },
+
+  setPreferredAgent: (agent) => {
+    set({ preferredAgent: agent })
   },
 
   setPermissionMode: (mode) => {
@@ -610,12 +619,13 @@ export const useSessionStore = create<State>((set, get) => ({
     }))
 
     // Send to backend — ControlPlane will queue if a run is active
-    const { preferredModel } = get()
+    const { preferredModel, preferredAgent } = get()
     window.clui.prompt(activeTabId, requestId, {
       prompt: fullPrompt,
       projectPath: resolvedPath,
       sessionId: tab.claudeSessionId || undefined,
       model: preferredModel || undefined,
+      agent: preferredAgent || undefined,
       addDirs: tab.additionalDirs.length > 0 ? tab.additionalDirs : undefined,
     }).catch((err: Error) => {
       get().handleError(activeTabId, {
@@ -644,6 +654,7 @@ export const useSessionStore = create<State>((set, get) => ({
             updated.sessionTools = event.tools
             updated.sessionMcpServers = event.mcpServers
             updated.sessionSkills = event.skills
+            updated.sessionAgents = event.agents
             updated.sessionVersion = event.version
             // Don't change status/activity for warmup inits — they're invisible
             if (!event.isWarmup) {

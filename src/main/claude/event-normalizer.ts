@@ -53,6 +53,7 @@ function normalizeSystem(event: InitEvent): NormalizedEvent[] {
     model: event.model || 'unknown',
     mcpServers: event.mcp_servers || [],
     skills: event.skills || [],
+    agents: event.agents || [],
     version: event.claude_code_version || 'unknown',
   }]
 }

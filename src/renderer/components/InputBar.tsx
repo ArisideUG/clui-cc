@@ -38,8 +38,10 @@ export function InputBar() {
   const removeAttachment = useSessionStore((s) => s.removeAttachment)
 
   const setPreferredModel = useSessionStore((s) => s.setPreferredModel)
+  const setPreferredAgent = useSessionStore((s) => s.setPreferredAgent)
   const staticInfo = useSessionStore((s) => s.staticInfo)
   const preferredModel = useSessionStore((s) => s.preferredModel)
+  const preferredAgent = useSessionStore((s) => s.preferredAgent)
   const activeTabId = useSessionStore((s) => s.activeTabId)
   const tab = useSessionStore((s) => s.tabs.find((t) => t.id === s.activeTabId))
   const colors = useColors()
@@ -214,11 +216,28 @@ export function InputBar() {
         }
         break
       }
+      case '/agent': {
+        const agents = tab?.sessionAgents || []
+        if (agents.length > 0) {
+          const lines = agents.map((a) => {
+            const active = a === preferredAgent
+            return `  ${active ? '\u25CF' : '\u25CB'} ${a}`
+          })
+          const header = preferredAgent ? `Active agent: ${preferredAgent}` : 'No agent selected'
+          addSystemMessage(`${header}\n\n${lines.join('\n')}\n\nSwitch agent: type /agent <name>\nClear agent: /agent none`)
+        } else if (tab?.claudeSessionId) {
+          addSystemMessage('No agents available in this session. Add .md files to your agents/ directory.')
+        } else {
+          addSystemMessage('No session metadata yet — send a message first.')
+        }
+        break
+      }
       case '/help': {
         const lines = [
           '/clear — Clear conversation history',
           '/cost — Show token usage and cost',
           '/model — Show model info & switch models',
+          '/agent — Show agents & switch agent persona',
           '/mcp — Show MCP server status',
           '/skills — Show available skills',
           '/help — Show this list',
@@ -227,7 +246,7 @@ export function InputBar() {
         break
       }
     }
-  }, [tab, clearTab, addSystemMessage, staticInfo, preferredModel])
+  }, [tab, clearTab, addSystemMessage, staticInfo, preferredModel, preferredAgent])
 
   const handleSlashSelect = useCallback((cmd: SlashCommand) => {
     const isSkillCommand = !!tab?.sessionSkills?.includes(cmd.command.replace(/^\//, ''))
@@ -270,6 +289,35 @@ export function InputBar() {
       }
       return
     }
+    const agentMatch = prompt.match(/^\/agent\s+(\S+)/i)
+    if (agentMatch) {
+      const query = agentMatch[1].toLowerCase()
+      if (query === 'none' || query === 'off' || query === 'clear') {
+        setPreferredAgent(null)
+        setInput('')
+        setSlashFilter(null)
+        addSystemMessage('Agent cleared — using default Claude Code.')
+      } else {
+        const agents = tab?.sessionAgents || []
+        const match = agents.find((a) => a.toLowerCase() === query || a.toLowerCase().includes(query))
+        if (match) {
+          setPreferredAgent(match)
+          setInput('')
+          setSlashFilter(null)
+          addSystemMessage(`Agent switched to ${match}`)
+        } else if (/^[a-zA-Z0-9_-]{1,64}$/.test(agentMatch[1])) {
+          setPreferredAgent(agentMatch[1])
+          setInput('')
+          setSlashFilter(null)
+          addSystemMessage(`Agent set to "${agentMatch[1]}" (not in session list — will be passed as --agent ${agentMatch[1]})`)
+        } else {
+          setInput('')
+          setSlashFilter(null)
+          addSystemMessage(`Invalid agent name. Use only letters, numbers, hyphens, and underscores (max 64 chars).`)
+        }
+      }
+      return
+    }
     if (!prompt && attachments.length === 0) return
     if (isConnecting) return
     setInput('')
@@ -280,7 +328,7 @@ export function InputBar() {
     sendMessage(prompt || 'See attached files')
     // Refocus after React re-renders from the state update
     requestAnimationFrame(() => textareaRef.current?.focus())
-  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect])
+  }, [input, isBusy, sendMessage, attachments.length, showSlashMenu, slashFilter, slashIndex, handleSlashSelect, setPreferredAgent, addSystemMessage, tab?.sessionAgents])
 
   // ─── Keyboard ───
   const handleKeyDown = (e: React.KeyboardEvent) => {

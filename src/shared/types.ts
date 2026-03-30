@@ -161,6 +161,8 @@ export interface TabState {
   sessionTools: string[]
   sessionMcpServers: Array<{ name: string; status: string }>
   sessionSkills: string[]
+  /** Available agent personas from the session */
+  sessionAgents: string[]
   sessionVersion: string | null
   /** Prompts waiting behind the current run (display text only) */
   queuedPrompts: string[]
@@ -193,7 +195,7 @@ export interface RunResult {
 // ─── Canonical Events (normalized from raw stream) ───
 
 export type NormalizedEvent =
-  | { type: 'session_init'; sessionId: string; tools: string[]; model: string; mcpServers: Array<{ name: string; status: string }>; skills: string[]; version: string; isWarmup?: boolean }
+  | { type: 'session_init'; sessionId: string; tools: string[]; model: string; mcpServers: Array<{ name: string; status: string }>; skills: string[]; agents: string[]; version: string; isWarmup?: boolean }
   | { type: 'text_chunk'; text: string }
   | { type: 'tool_call'; toolName: string; toolId: string; index: number }
   | { type: 'tool_call_update'; toolId: string; partialInput: string }
@@ -217,6 +219,8 @@ export interface RunOptions {
   maxBudgetUsd?: number
   systemPrompt?: string
   model?: string
+  /** Custom agent persona via --agent (e.g. 'pm', 'dev') */
+  agent?: string
   /** Path to CLUI-scoped settings file with hook config (passed via --settings) */
   hookSettingsPath?: string
   /** Extra directories to add via --add-dir (session-preserving) */

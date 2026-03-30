@@ -104,6 +104,7 @@ export class RunManager extends EventEmitter {
     const candidates = [
       '/usr/local/bin/claude',
       '/opt/homebrew/bin/claude',
+      join(homedir(), '.local/bin/claude'),
       join(homedir(), '.npm-global/bin/claude'),
     ]
 
@@ -152,6 +153,9 @@ export class RunManager extends EventEmitter {
     }
     if (options.model) {
       args.push('--model', options.model)
+    }
+    if (options.agent && /^[a-zA-Z0-9_-]{1,64}$/.test(options.agent)) {
+      args.push('--agent', options.agent)
     }
     if (options.addDirs && options.addDirs.length > 0) {
       for (const dir of options.addDirs) {

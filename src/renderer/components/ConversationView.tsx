@@ -126,7 +126,7 @@ export function ConversationView() {
   const isFailed = tab.status === 'failed'
   const showInterrupt = isRunning && tab.messages.some((m) => m.role === 'user')
 
-  if (tab.messages.length === 0) {
+  if (tab.messages.length === 0 && !tab.hasChosenDirectory) {
     return <EmptyState />
   }
 

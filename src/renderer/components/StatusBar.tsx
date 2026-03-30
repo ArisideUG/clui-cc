@@ -127,6 +127,127 @@ function ModelPicker() {
   )
 }
 
+/* ─── Agent Picker (global — selects agent persona for all new runs) ─── */
+
+function AgentPicker() {
+  const preferredAgent = useSessionStore((s) => s.preferredAgent)
+  const setPreferredAgent = useSessionStore((s) => s.setPreferredAgent)
+  const tab = useSessionStore(
+    (s) => s.tabs.find((t) => t.id === s.activeTabId),
+    (a, b) => a === b || (!!a && !!b && a.status === b.status && a.sessionAgents === b.sessionAgents),
+  )
+  const popoverLayer = usePopoverLayer()
+  const colors = useColors()
+
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popoverRef = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState({ bottom: 0, left: 0 })
+
+  const isBusy = tab?.status === 'running' || tab?.status === 'connecting'
+  const agents = tab?.sessionAgents || []
+
+  // Don't render if no agents are available
+  if (agents.length === 0 && !preferredAgent) return null
+
+  const updatePos = () => {
+    if (!triggerRef.current) return
+    const rect = triggerRef.current.getBoundingClientRect()
+    setPos({
+      bottom: window.innerHeight - rect.top + 6,
+      left: rect.left,
+    })
+  }
+
+  const handleToggle = () => {
+    if (isBusy) return
+    if (!open) updatePos()
+    setOpen((o) => !o)
+  }
+
+  const activeLabel = preferredAgent || 'No Agent'
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        onClick={handleToggle}
+        className="flex items-center gap-0.5 text-[10px] rounded-full px-1.5 py-0.5 transition-colors"
+        style={{
+          color: preferredAgent ? colors.accent : colors.textTertiary,
+          cursor: isBusy ? 'not-allowed' : 'pointer',
+        }}
+        title={isBusy ? 'Stop the task to change agent' : 'Switch agent persona'}
+      >
+        {activeLabel}
+        <CaretDown size={10} style={{ opacity: 0.6 }} />
+      </button>
+
+      {popoverLayer && open && createPortal(
+        <motion.div
+          ref={popoverRef}
+          data-clui-ui
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 4 }}
+          transition={{ duration: 0.12 }}
+          className="rounded-xl"
+          style={{
+            position: 'fixed',
+            bottom: pos.bottom,
+            left: pos.left,
+            width: 192,
+            pointerEvents: 'auto',
+            background: colors.popoverBg,
+            backdropFilter: 'blur(20px)',
+            WebkitBackdropFilter: 'blur(20px)',
+            boxShadow: colors.popoverShadow,
+            border: `1px solid ${colors.popoverBorder}`,
+          }}
+        >
+          <div className="py-1">
+            {/* No Agent option */}
+            <button
+              onClick={() => { setPreferredAgent(null); setOpen(false) }}
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors"
+              style={{
+                color: !preferredAgent ? colors.textPrimary : colors.textSecondary,
+                fontWeight: !preferredAgent ? 600 : 400,
+              }}
+            >
+              No Agent
+              {!preferredAgent && <Check size={12} style={{ color: colors.accent }} />}
+            </button>
+
+            {agents.length > 0 && (
+              <div className="mx-2 my-0.5" style={{ height: 1, background: colors.popoverBorder }} />
+            )}
+
+            {agents.map((agent) => {
+              const isSelected = preferredAgent === agent
+              return (
+                <button
+                  key={agent}
+                  onClick={() => { setPreferredAgent(agent); setOpen(false) }}
+                  className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] transition-colors"
+                  style={{
+                    color: isSelected ? colors.textPrimary : colors.textSecondary,
+                    fontWeight: isSelected ? 600 : 400,
+                  }}
+                >
+                  {agent}
+                  {isSelected && <Check size={12} style={{ color: colors.accent }} />}
+                </button>
+              )
+            })}
+          </div>
+        </motion.div>,
+        popoverLayer,
+      )}
+    </>
+  )
+}
+
 /* ─── Permission Mode Picker (global — affects all tabs) ─── */
 
 function PermissionModePicker() {
@@ -429,6 +550,8 @@ export function StatusBar() {
         <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
 
         <ModelPicker />
+
+        <AgentPicker />
 
         <span style={{ color: colors.textMuted, fontSize: 10 }}>|</span>
 
