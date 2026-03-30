@@ -658,12 +658,30 @@ ipcMain.handle(IPC.ATTACH_FILES, async () => {
 ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
   if (!mainWindow) return null
 
+  // Check screen recording permission before attempting capture
+  const screenAccess = systemPreferences.getMediaAccessStatus('screen')
+  if (screenAccess !== 'granted') {
+    // Show dialog guiding user to enable screen recording
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      title: 'Screen Recording Permission Required',
+      message: 'Clui CC needs screen recording permission to take screenshots.',
+      detail: 'Go to System Settings > Privacy & Security > Screen Recording and enable Clui CC.',
+      buttons: ['Open System Settings', 'Cancel'],
+      defaultId: 0,
+    })
+    if (response === 0) {
+      shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+    }
+    return null
+  }
+
   if (SPACES_DEBUG) snapshotWindowState('screenshot pre-hide')
   mainWindow.hide()
   await new Promise((r) => setTimeout(r, 300))
 
   try {
-    const { execSync } = require('child_process')
+    const { execFileSync } = require('child_process')
     const { join } = require('path')
     const { tmpdir } = require('os')
     const { readFileSync, existsSync } = require('fs')
@@ -671,10 +689,14 @@ ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
     const timestamp = Date.now()
     const screenshotPath = join(tmpdir(), `clui-screenshot-${timestamp}.png`)
 
-    execSync(`/usr/sbin/screencapture -i "${screenshotPath}"`, {
-      timeout: 30000,
-      stdio: 'ignore',
-    })
+    try {
+      execFileSync('/usr/sbin/screencapture', ['-i', screenshotPath], {
+        timeout: 30000,
+        stdio: 'ignore',
+      })
+    } catch {
+      // screencapture may exit non-zero even on success on some macOS versions
+    }
 
     if (!existsSync(screenshotPath)) {
       return null
@@ -682,6 +704,7 @@ ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
 
     // Return structured attachment with data URL preview
     const buf = readFileSync(screenshotPath)
+    if (buf.length === 0) return null
     return {
       id: crypto.randomUUID(),
       type: 'image',
@@ -691,7 +714,8 @@ ipcMain.handle(IPC.TAKE_SCREENSHOT, async () => {
       dataUrl: `data:image/png;base64,${buf.toString('base64')}`,
       size: buf.length,
     }
-  } catch {
+  } catch (err) {
+    log(`Screenshot error: ${err}`)
     return null
   } finally {
     if (mainWindow) {
