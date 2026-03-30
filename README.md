@@ -1,6 +1,28 @@
-# Clui CC — Command Line User Interface for Claude Code
+# Clui CC — Enhanced Fork with Agent Picker
+
+> **Fork of [lcoutodemos/clui-cc](https://github.com/lcoutodemos/clui-cc)** with multi-agent workflow support, security hardening, and UX fixes.
+> Maintained by [Ariside UG](https://github.com/ArisideUG).
 
 A lightweight, transparent desktop overlay for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on macOS. Clui CC wraps the Claude Code CLI in a floating pill interface with multi-tab sessions, a permission approval UI, voice input, and a skills marketplace.
+
+## What's New in This Fork
+
+### Agent Picker (new)
+Switch between custom agent personas (`--agent pm`, `--agent dev`, etc.) directly from the UI — no terminal needed. Built for teams and professionals running multi-agent workflows across projects.
+
+- **Agent Picker dropdown** in the status bar — auto-populates from your `agents/` directory
+- **`/agent` slash command** — switch agents via keyboard (`/agent pm`, `/agent none`)
+- **Validated input** — agent names are sanitized against argument injection
+
+### Security Hardening
+- Agent name validation (`/^[a-zA-Z0-9_-]{1,64}$/`) prevents argument injection via `spawn()`
+- Full security audit performed: Electron config, CSP, IPC boundaries, permission server
+
+### Bug Fixes
+- **Choose Folder loop** — folder picker no longer reopens after selection
+- **Claude CLI path** — supports `~/.local/bin/claude` (newer installation method)
+
+---
 
 ## Demo
 
@@ -10,6 +32,7 @@ A lightweight, transparent desktop overlay for [Claude Code](https://docs.anthro
 
 ## Features
 
+- **Agent Picker** — switch between custom agent personas from the UI or via `/agent` command.
 - **Floating overlay** — transparent, click-through window that stays on top. Toggle with `⌥ + Space` (fallback: `Cmd+Shift+K`).
 - **Multi-tab sessions** — each tab spawns its own `claude -p` process with independent session state.
 - **Permission approval UI** — intercepts tool calls via PreToolUse HTTP hooks so you can review and approve/deny from the UI.
